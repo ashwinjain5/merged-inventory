@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Merged Inventory System</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- v2.0: Papa Parse for CSV parsing -->
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- v2.0: SheetJS for XLSX parsing -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.mini.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: #000000;
+      background-color: #ffffff;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    :root {
+      --navy-blue: #1a365d;
+      --dark-orange: #c65102;
+      --dark-brown: #5d4037;
+      --dark-red: #c62828;
+      --black: #000000;
+      --white: #ffffff;
+      --light-gray: #f5f5f5;
+      --border-gray: #e0e0e0;
+      --negative-red: #d32f2f;
+      --negative-bg: #ffebee;
+      --success-green: #2e7d32;
+    }
+
+    .app-container {
+      max-width: 480px;
+      margin: 0 auto;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--white);
+    }
+
+    .tab-nav {
+      display: flex;
+      background: var(--white);
+      border-bottom: 1px solid var(--border-gray);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 16px 8px;
+      background: var(--white);
+      border: none;
+      border-bottom: 3px solid transparent;
+      font-size: 14px;
+      font-weight: 700;
+      color: #666666;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .tab-btn:active { background: var(--light-gray); }
+    .tab-btn.active[data-tab="incoming"] { color: var(--navy-blue); border-bottom-color: var(--navy-blue); }
+    .tab-btn.active[data-tab="outgoing"] { color: var(--dark-orange); border-bottom-color: var(--dark-orange); }
+    .tab-btn.active[data-tab="search"] { color: var(--dark-brown); border-bottom-color: var(--dark-brown); }
+    .tab-btn.active[data-tab="correction"] { color: var(--dark-red); border-bottom-color: var(--dark-red); }
+
+    .tab-content { display: none; padding: 16px; flex: 1; background: var(--white); }
+    .tab-content.active { display: block; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; margin-bottom: 6px; font-weight: 700; color: var(--black); font-size: 14px; }
+    .form-label .optional { font-weight: 400; color: #888888; font-size: 12px; }
+    .input-row { display: flex; gap: 8px; }
+
+    .form-input, .form-select {
+      flex: 1;
+      width: 100%;
+      padding: 14px 12px;
+      font-size: 16px;
+      border: 2px solid var(--border-gray);
+      border-radius: 8px;
+      background: var(--white);
+      color: var(--black);
+      transition: border-color 0.2s ease;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .form-select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23000' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    .form-input:focus, .form-select:focus { outline: none; }
+    #incoming-tab .form-input:focus, #incoming-tab .form-select:focus { border-color: var(--navy-blue); }
+    #outgoing-tab .form-input:focus, #outgoing-tab .form-select:focus { border-color: var(--dark-orange); }
+    #search-tab .form-input:focus { border-color: var(--dark-brown); }
+    #correction-tab .form-input:focus { border-color: var(--dark-red); }
+
+    .btn {
+      padding: 14px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      background: var(--white);
+    }
+
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-scan { min-width: 100px; flex-shrink: 0; }
+    #incoming-tab .btn-scan { border: 2px solid var(--navy-blue); color: var(--navy-blue); }
+    #incoming-tab .btn-scan:active:not(:disabled) { background: var(--navy-blue); color: var(--white); }
+    #outgoing-tab .btn-scan { border: 2px solid var(--dark-orange); color: var(--dark-orange); }
+    #outgoing-tab .btn-scan:active:not(:disabled) { background: var(--dark-orange); color: var(--white); }
+    #search-tab .btn-scan { border: 2px solid var(--dark-brown); color: var(--dark-brown); }
+    #search-tab .btn-scan:active:not(:disabled) { background: var(--dark-brown); color: var(--white); }
+    #correction-tab .btn-scan { border: 2px solid var(--dark-red); color: var(--dark-red); }
+    #correction-tab .btn-scan:active:not(:disabled) { background: var(--dark-red); color: var(--white); }
+
+    .btn-action { width: 100%; margin-top: 8px; background: var(--white); }
+    #incoming-tab .btn-action { border: 2px solid var(--navy-blue); color: var(--navy-blue); }
+    #incoming-tab .btn-action:active:not(:disabled) { background: var(--navy-blue); color: var(--white); }
+    #outgoing-tab .btn-action { border: 2px solid var(--dark-orange); color: var(--dark-orange); }
+    #outgoing-tab .btn-action:active:not(:disabled) { background: var(--dark-orange); color: var(--white); }
+    #search-tab .btn-action { border: 2px solid var(--dark-brown); color: var(--dark-brown); }
+    #search-tab .btn-action:active:not(:disabled) { background: var(--dark-brown); color: var(--white); }
+    #correction-tab .btn-action { border: 2px solid var(--dark-red); color: var(--dark-red); }
+    #correction-tab .btn-action:active:not(:disabled) { background: var(--dark-red); color: var(--white); }
+
+    /* v2.0: Bulk Upload Styles */
+    .bulk-upload-section {
+      background: var(--light-gray);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      border: 1px dashed var(--border-gray);
+    }
+
+    .bulk-upload-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .bulk-upload-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .btn-bulk {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-download {
+      background: var(--white);
+      border: 2px solid #666;
+      color: #666;
+    }
+
+    .btn-download:active { background: #666; color: var(--white); }
+
+    #incoming-tab .btn-upload { background: var(--white); border: 2px solid var(--navy-blue); color: var(--navy-blue); }
+    #incoming-tab .btn-upload:active { background: var(--navy-blue); color: var(--white); }
+    #outgoing-tab .btn-upload { background: var(--white); border: 2px solid var(--dark-orange); color: var(--dark-orange); }
+    #outgoing-tab .btn-upload:active { background: var(--dark-orange); color: var(--white); }
+
+    .file-input-hidden { display: none; }
+
+    .or-divider {
+      display: flex;
+      align-items: center;
+      margin: 16px 0;
+      color: #888;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .or-divider::before, .or-divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid var(--border-gray);
+    }
+
+    .or-divider span { padding: 0 12px; }
+
+    /* Preview Table Styles */
+    .upload-preview-section {
+      display: none;
+      margin-top: 16px;
+    }
+
+    .upload-preview-section.active { display: block; }
+
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .preview-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--black);
+    }
+
+    .preview-count {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .preview-table-wrapper {
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--border-gray);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 400px;
+    }
+
+    .preview-table th, .preview-table td {
+      padding: 10px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-gray);
+    }
+
+    .preview-table th {
+      background: var(--light-gray);
+      font-weight: 700;
+      position: sticky;
+      top: 0;
+    }
+
+    .preview-table tr.error-row {
+      background: var(--negative-bg);
+    }
+
+    .preview-table .error-cell {
+      color: var(--negative-red);
+      font-weight: 600;
+    }
+
+    .preview-error-message {
+      background: var(--negative-bg);
+      border: 1px solid var(--negative-red);
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+      color: var(--negative-red);
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .preview-success-message {
+      background: #e8f5e9;
+      border: 1px solid var(--success-green);
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+      color: var(--success-green);
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .preview-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .preview-buttons .btn { flex: 1; }
+
+    .records-section { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-gray); }
+    .records-title { font-weight: 700; font-size: 14px; color: var(--black); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .records-table-wrapper { overflow-x: auto; margin-bottom: 16px; }
+
+    .records-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 100%; }
+    .records-table th, .records-table td { padding: 12px 8px; text-align: left; border-bottom: 1px solid var(--border-gray); color: var(--black); }
+    .records-table th { font-weight: 700; background: var(--light-gray); white-space: nowrap; }
+    #incoming-tab .records-table th { border-bottom: 2px solid var(--navy-blue); }
+    #outgoing-tab .records-table th { border-bottom: 2px solid var(--dark-orange); }
+    .records-table td { font-weight: 500; }
+
+    .btn-remove { background: none; border: none; color: #999999; font-size: 20px; font-weight: 700; cursor: pointer; padding: 4px 8px; line-height: 1; }
+    .btn-remove:active { color: #cc0000; }
+    .no-records { text-align: center; padding: 24px; color: #666666; font-style: italic; }
+
+    .search-section { margin-bottom: 24px; }
+    .search-results { display: flex; flex-direction: column; gap: 16px; }
+
+    .result-card { background: var(--white); border: 2px solid var(--dark-brown); border-radius: 12px; overflow: hidden; }
+    .result-card-header { background: var(--light-gray); padding: 12px 16px; border-bottom: 2px solid var(--dark-brown); display: flex; justify-content: space-between; align-items: center; }
+    .result-card-title { font-weight: 700; color: var(--dark-brown); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .result-card-count { font-weight: 700; color: var(--black); font-size: 13px; }
+    .result-card-body { max-height: 280px; overflow-y: auto; }
+
+    .result-item { padding: 14px 16px; border-bottom: 1px solid var(--border-gray); }
+    .result-item:last-child { border-bottom: none; }
+    .result-item.negative { background: var(--negative-bg); }
+
+    .result-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .result-row:last-child { margin-bottom: 0; }
+    .result-label { font-weight: 600; color: #666666; font-size: 12px; text-transform: uppercase; }
+    .result-value { font-weight: 700; color: var(--black); font-size: 13px; text-align: right; max-width: 60%; word-break: break-all; }
+    .result-value.negative { color: var(--negative-red); }
+
+    .no-results { padding: 20px; text-align: center; color: #666666; font-style: italic; }
+
+    .scanner-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.95); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; padding: 20px; }
+    .scanner-overlay.active { display: flex; }
+    .scanner-container { width: 100%; max-width: 400px; text-align: center; }
+    .scanner-title { color: var(--white); text-align: center; margin-bottom: 4px; font-weight: 700; font-size: 18px; }
+    .scanner-hint { color: #aaa; font-size: 14px; margin: 0 0 16px; }
+    #scanner-reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; }
+    #scanner-reader video { width: 100% !important; border-radius: 12px; }
+    .btn-close-scanner { width: 100%; margin-top: 16px; padding: 16px 40px; background: transparent; border: 2px solid rgba(255,255,255,0.3); border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; color: rgba(255,255,255,0.7); text-transform: uppercase; }
+    .btn-close-scanner:active { background: rgba(255,255,255,0.1); }
+
+    .toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 2000; width: calc(100% - 32px); max-width: 400px; }
+    .toast { padding: 16px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; animation: toastSlideUp 0.3s ease; text-align: center; margin-bottom: 8px; }
+    .toast-success { background: #1b5e20; color: var(--white); }
+    .toast-error { background: #b71c1c; color: var(--white); }
+    .toast-warning { background: #e65100; color: var(--white); }
+    .toast-info { background: #0d47a1; color: var(--white); }
+    @keyframes toastSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+    .loading-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.9); z-index: 1500; justify-content: center; align-items: center; flex-direction: column; }
+    .loading-overlay.active { display: flex; }
+    .loading-spinner { width: 48px; height: 48px; border: 4px solid var(--border-gray); border-top-color: var(--navy-blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .loading-text { margin-top: 16px; font-weight: 600; color: var(--black); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Confirmation Modal */
+    .confirm-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 1800; justify-content: center; align-items: center; padding: 20px; }
+    .confirm-overlay.active { display: flex; }
+    .confirm-modal { background: var(--white); border-radius: 12px; max-width: 400px; width: 100%; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+    .confirm-header { padding: 16px 20px; background: #fff3e0; border-bottom: 2px solid var(--dark-orange); }
+    .confirm-title { font-weight: 700; font-size: 16px; color: var(--dark-orange); }
+    .confirm-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+    .confirm-message { font-size: 14px; color: var(--black); margin-bottom: 12px; }
+    .warning-list { list-style: none; padding: 0; margin: 0; }
+    .warning-item { padding: 10px 12px; background: var(--negative-bg); border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: var(--negative-red); font-weight: 600; }
+    .confirm-footer { padding: 16px 20px; border-top: 1px solid var(--border-gray); display: flex; gap: 12px; }
+    .confirm-footer .btn { flex: 1; }
+    .btn-cancel { border: 2px solid #666666; color: #666666; }
+    .btn-confirm { border: 2px solid var(--dark-orange); color: var(--dark-orange); }
+
+    /* Correction Tab Styles */
+    .current-qty-display {
+      background: var(--light-gray);
+      border: 2px solid var(--dark-red);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      text-align: center;
+    }
+    .current-qty-display.hidden { display: none; }
+    .current-qty-label { font-size: 14px; color: #666666; margin-bottom: 4px; }
+    .current-qty-value { font-size: 28px; font-weight: 700; color: var(--black); }
+    .current-qty-sku { font-size: 12px; color: #888888; margin-top: 4px; }
+
+    .correction-form-section { display: none; }
+    .correction-form-section.visible { display: block; }
+
+    .correction-confirm-modal .confirm-header { background: #ffebee; border-bottom: 2px solid var(--dark-red); }
+    .correction-confirm-modal .confirm-title { color: var(--dark-red); }
+    .correction-confirm-modal .btn-confirm { border-color: var(--dark-red); color: var(--dark-red); }
+
+    .correction-summary { background: var(--light-gray); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .correction-summary-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .correction-summary-row:last-child { margin-bottom: 0; }
+    .correction-summary-label { font-weight: 600; color: #666666; }
+    .correction-summary-value { font-weight: 700; color: var(--black); }
+    .correction-summary-value.increase { color: #2e7d32; }
+    .correction-summary-value.decrease { color: var(--dark-red); }
+
+    /* Box Selection Table Styles */
+    .box-selection-container { margin-bottom: 16px; border: 2px solid var(--dark-orange); border-radius: 8px; padding: 12px; background: var(--light-gray); }
+    .box-selection-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .allocation-counter { font-weight: 700; font-size: 13px; color: var(--dark-orange); background: #fff3e0; padding: 4px 10px; border-radius: 4px; }
+    .allocation-counter.complete { color: var(--success-green); background: #e8f5e9; }
+    .allocation-counter.over { color: var(--negative-red); background: #ffebee; }
+    .box-selection-table-wrapper { overflow-x: auto; max-height: 250px; overflow-y: auto; }
+    .box-selection-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .box-selection-table th, .box-selection-table td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border-gray); }
+    .box-selection-table th { font-weight: 700; background: var(--white); border-bottom: 2px solid var(--dark-orange); position: sticky; top: 0; }
+    .box-selection-table input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--dark-orange); }
+    .box-selection-table input[type="number"] { width: 70px; padding: 8px 6px; font-size: 14px; border: 2px solid var(--border-gray); border-radius: 6px; text-align: center; }
+    .box-selection-table input[type="number"]:focus { outline: none; border-color: var(--dark-orange); }
+    .box-selection-table input[type="number"]:disabled { background: #eee; color: #999; }
+    .box-selection-table tr.selected { background: #fff3e0; }
+    .box-selection-message { margin-top: 8px; font-size: 12px; color: #666; text-align: center; }
+    .box-selection-message.no-boxes { color: var(--negative-red); font-weight: 600; padding: 12px; }
+    .box-selection-loading { text-align: center; padding: 20px; color: #666; font-style: italic; }
+
+    /* Other Details Collapsible */
+    .other-details-section { margin-bottom: 16px; }
+    .other-details-toggle { width: 100%; padding: 12px 16px; background: var(--light-gray); border: 2px solid var(--border-gray); border-radius: 8px; font-size: 14px; font-weight: 700; color: #666; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .other-details-toggle:hover { border-color: var(--dark-orange); color: var(--dark-orange); }
+    .other-details-toggle.open { border-color: var(--dark-orange); border-bottom-left-radius: 0; border-bottom-right-radius: 0; color: var(--dark-orange); }
+    .toggle-arrow { font-size: 12px; transition: transform 0.2s ease; }
+    .toggle-arrow.open { transform: rotate(180deg); }
+    .other-details-content { border: 2px solid var(--dark-orange); border-top: none; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; padding: 16px; background: var(--white); }
+
+    @media (max-width: 360px) {
+      .tab-btn { font-size: 12px; padding: 14px 4px; }
+      .btn-scan { min-width: 80px; padding: 14px 12px; font-size: 12px; }
+      .records-table { font-size: 12px; }
+      .records-table th, .records-table td { padding: 10px 6px; }
+      .bulk-upload-buttons { flex-direction: column; }
+      .box-selection-table input[type="number"] { width: 56px; }
+      .allocation-counter { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="incoming">Incoming</button>
+      <button class="tab-btn" data-tab="outgoing">Outgoing</button>
+      <button class="tab-btn" data-tab="search">Search</button>
+      <button class="tab-btn" data-tab="correction">Correction</button>
+    </nav>
+
+    <!-- INCOMING TAB -->
+    <div id="incoming-tab" class="tab-content active">
+      <!-- v2.0: Bulk Upload Section -->
+      <div class="bulk-upload-section">
+        <div class="bulk-upload-title">Bulk Upload</div>
+        <div class="bulk-upload-buttons">
+          <button type="button" class="btn-bulk btn-download" onclick="downloadIncomingTemplate()">Download Template</button>
+          <button type="button" class="btn-bulk btn-upload" onclick="document.getElementById('incoming-file-input').click()">Upload CSV/XLSX</button>
+          <input type="file" id="incoming-file-input" class="file-input-hidden" accept=".csv,.xlsx,.xls" onchange="handleIncomingFileUpload(event)">
+        </div>
+
+        <!-- Preview Section -->
+        <div class="upload-preview-section" id="incoming-preview-section">
+          <div class="preview-header">
+            <span class="preview-title">Preview</span>
+            <span class="preview-count" id="incoming-preview-count">0 rows</span>
+          </div>
+          <div id="incoming-preview-message"></div>
+          <div class="preview-table-wrapper">
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>BoxNumber</th>
+                  <th>Brand</th>
+                  <th>SKU</th>
+                  <th>Quantity</th>
+                  <th>Errors</th>
+                </tr>
+              </thead>
+              <tbody id="incoming-preview-body"></tbody>
+            </table>
+          </div>
+          <div class="preview-buttons">
+            <button type="button" class="btn btn-cancel" onclick="cancelIncomingUpload()">Cancel</button>
+            <button type="button" class="btn btn-action" id="incoming-confirm-upload-btn" onclick="confirmIncomingUpload()" disabled>Confirm Upload</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="or-divider"><span>Or Add Manually</span></div>
+
+      <form id="incoming-form" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label">Brand <span class="optional">(Optional)</span></label>
+          <select id="incoming-brand" class="form-select">
+            <option value="">Select Brand</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Box Number</label>
+          <input type="text" id="incoming-box" class="form-input" placeholder="Enter box number" required autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Enter or Scan SKU</label>
+          <div class="input-row">
+            <input type="text" id="incoming-sku" class="form-input" placeholder="Enter SKU" required autocomplete="off">
+            <button type="button" class="btn btn-scan" onclick="startScanner('incoming-sku')">Scan SKU</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Quantity</label>
+          <input type="number" id="incoming-qty" class="form-input" placeholder="Enter quantity" min="1" value="1" required>
+        </div>
+
+        <button type="button" class="btn btn-action" onclick="addIncomingRecord()">Add SKU</button>
+      </form>
+
+      <div class="records-section">
+        <div class="records-title">Records to Submit</div>
+        <div class="records-table-wrapper">
+          <table class="records-table">
+            <thead>
+              <tr>
+                <th>Box</th>
+                <th>Brand</th>
+                <th>SKU</th>
+                <th>Qty</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="incoming-records">
+              <tr><td colspan="5" class="no-records">No records added yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-action" id="incoming-submit-btn" onclick="submitIncoming()" disabled>Submit</button>
+      </div>
+    </div>
+
+    <!-- OUTGOING TAB -->
+    <div id="outgoing-tab" class="tab-content">
+      <!-- v2.0: Bulk Upload Section -->
+      <div class="bulk-upload-section">
+        <div class="bulk-upload-title">Bulk Upload</div>
+        <div class="bulk-upload-buttons">
+          <button type="button" class="btn-bulk btn-download" onclick="downloadOutgoingTemplate()">Download Template</button>
+          <button type="button" class="btn-bulk btn-upload" onclick="document.getElementById('outgoing-file-input').click()">Upload CSV/XLSX</button>
+          <input type="file" id="outgoing-file-input" class="file-input-hidden" accept=".csv,.xlsx,.xls" onchange="handleOutgoingFileUpload(event)">
+        </div>
+
+        <!-- Preview Section -->
+        <div class="upload-preview-section" id="outgoing-preview-section">
+          <div class="preview-header">
+            <span class="preview-title">Preview</span>
+            <span class="preview-count" id="outgoing-preview-count">0 rows</span>
+          </div>
+          <div id="outgoing-preview-message"></div>
+          <div class="preview-table-wrapper">
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Qty</th>
+                  <th>BoxNumber</th>
+                  <th>Marketplace</th>
+                  <th>Errors</th>
+                </tr>
+              </thead>
+              <tbody id="outgoing-preview-body"></tbody>
+            </table>
+          </div>
+          <div class="preview-buttons">
+            <button type="button" class="btn btn-cancel" onclick="cancelOutgoingUpload()">Cancel</button>
+            <button type="button" class="btn btn-action" id="outgoing-confirm-upload-btn" onclick="confirmOutgoingUpload()" disabled>Confirm Upload</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="or-divider"><span>Or Add Manually</span></div>
+
+      <form id="outgoing-form" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label">SKU ID</label>
+          <div class="input-row">
+            <input type="text" id="outgoing-sku" class="form-input" placeholder="Enter SKU" required autocomplete="off">
+            <button type="button" class="btn btn-scan" onclick="startScanner('outgoing-sku')">Scan</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Total Quantity Needed</label>
+          <input type="number" id="outgoing-qty" class="form-input" placeholder="Enter total quantity" min="1" value="1" required>
+        </div>
+
+        <div id="box-selection-container" class="box-selection-container" style="display: none;">
+          <div class="box-selection-header">
+            <span class="form-label" style="margin-bottom: 0;">Select Boxes</span>
+            <span class="allocation-counter" id="allocation-counter">Allocated: 0 / 1</span>
+          </div>
+          <div class="box-selection-table-wrapper">
+            <table class="box-selection-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px;"></th>
+                  <th>Box</th>
+                  <th>Available</th>
+                  <th>Take</th>
+                </tr>
+              </thead>
+              <tbody id="box-selection-body"></tbody>
+            </table>
+          </div>
+          <div id="box-selection-message" class="box-selection-message"></div>
+        </div>
+
+        <div class="other-details-section">
+          <button type="button" class="other-details-toggle" id="other-details-toggle" onclick="toggleOtherDetails()">
+            <span>Other Details</span>
+            <span class="toggle-arrow" id="toggle-arrow">&#9660;</span>
+          </button>
+          <div class="other-details-content" id="other-details-content" style="display: none;">
+            <div class="form-group">
+              <label class="form-label">Marketplace <span class="optional">(Optional)</span></label>
+              <select id="outgoing-marketplace" class="form-select">
+                <option value="">Select Marketplace</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Brand <span class="optional">(Optional)</span></label>
+              <select id="outgoing-brand" class="form-select">
+                <option value="">Select Brand</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Order ID <span class="optional">(Optional)</span></label>
+              <div class="input-row">
+                <input type="text" id="outgoing-order" class="form-input" placeholder="Enter Order ID" autocomplete="off">
+                <button type="button" class="btn btn-scan" onclick="startScanner('outgoing-order')">Scan</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-action" onclick="addOutgoingRecord()">Add Record</button>
+      </form>
+
+      <div class="records-section">
+        <div class="records-title">Records to Submit</div>
+        <div class="records-table-wrapper">
+          <table class="records-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Order</th>
+                <th>Box</th>
+                <th>Qty</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="outgoing-records">
+              <tr><td colspan="5" class="no-records">No records added yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-action" id="outgoing-submit-btn" onclick="validateAndSubmitOutgoing()" disabled>Submit</button>
+      </div>
+    </div>
+
+    <!-- SEARCH TAB -->
+    <div id="search-tab" class="tab-content">
+      <div class="search-section">
+        <div class="form-group">
+          <label class="form-label">Search by SKU, Box Number, or Brand</label>
+          <div class="input-row">
+            <input type="text" id="search-input" class="form-input" placeholder="Enter search query" autocomplete="off">
+            <button type="button" class="btn btn-scan" onclick="startScanner('search-input')">Scan</button>
+          </div>
+        </div>
+        <button type="button" class="btn btn-action" onclick="performSearch()">Search</button>
+      </div>
+
+      <div class="search-results" id="search-results">
+        <div class="result-card">
+          <div class="result-card-header">
+            <span class="result-card-title">Box Number Results</span>
+            <span class="result-card-count" id="box-count">0</span>
+          </div>
+          <div class="result-card-body" id="box-results">
+            <div class="no-results">No results</div>
+          </div>
+        </div>
+
+        <div class="result-card">
+          <div class="result-card-header">
+            <span class="result-card-title">SKU Results</span>
+            <span class="result-card-count" id="sku-count">0</span>
+          </div>
+          <div class="result-card-body" id="sku-results">
+            <div class="no-results">No results</div>
+          </div>
+        </div>
+
+        <div class="result-card">
+          <div class="result-card-header">
+            <span class="result-card-title">Brand Results</span>
+            <span class="result-card-count" id="brand-count">0</span>
+          </div>
+          <div class="result-card-body" id="brand-results">
+            <div class="no-results">No results</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CORRECTION TAB -->
+    <div id="correction-tab" class="tab-content">
+      <form id="correction-form" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label">SKU</label>
+          <div class="input-row">
+            <input type="text" id="correction-sku" class="form-input" placeholder="Enter SKU" required autocomplete="off">
+            <button type="button" class="btn btn-scan" onclick="startScanner('correction-sku')">Scan SKU</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Box Number</label>
+          <div class="input-row">
+            <input type="text" id="correction-box" class="form-input" placeholder="Enter box number" required autocomplete="off">
+            <button type="button" class="btn btn-scan" onclick="startScanner('correction-box')">Scan Box</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-action" id="check-qty-btn" onclick="checkCurrentQuantity()">Check Current Quantity</button>
+
+        <div class="current-qty-display hidden" id="current-qty-display">
+          <div class="current-qty-label">Current Quantity</div>
+          <div class="current-qty-value" id="current-qty-value">0</div>
+          <div class="current-qty-sku" id="current-qty-info"></div>
+        </div>
+
+        <div class="correction-form-section" id="correction-form-section">
+          <div class="form-group">
+            <label class="form-label">Actual Quantity</label>
+            <input type="number" id="correction-actual-qty" class="form-input" placeholder="Enter correct quantity" min="0" required>
+          </div>
+
+          <button type="button" class="btn btn-action" id="correction-submit-btn" onclick="validateAndSubmitCorrection()">Submit Correction</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scanner Overlay -->
+  <div class="scanner-overlay" id="scanner-overlay">
+    <div class="scanner-container">
+      <div class="scanner-title" id="scanner-title">Scan Barcode</div>
+      <p class="scanner-hint" id="scanner-hint">Point camera at barcode</p>
+      <div id="scanner-reader"></div>
+      <button class="btn-close-scanner" onclick="closeScanner()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Processing...</div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div class="confirm-overlay" id="confirm-overlay">
+    <div class="confirm-modal">
+      <div class="confirm-header">
+        <div class="confirm-title">Warning: Inventory Issues Detected</div>
+      </div>
+      <div class="confirm-body">
+        <div class="confirm-message">The following items will result in negative quantities:</div>
+        <ul class="warning-list" id="warning-list"></ul>
+      </div>
+      <div class="confirm-footer">
+        <button class="btn btn-cancel" onclick="closeConfirmModal()">Cancel</button>
+        <button class="btn btn-confirm" onclick="confirmSubmitOutgoing()">Submit Anyway</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Correction Confirmation Modal -->
+  <div class="confirm-overlay" id="correction-confirm-overlay">
+    <div class="confirm-modal correction-confirm-modal">
+      <div class="confirm-header">
+        <div class="confirm-title">Confirm Correction</div>
+      </div>
+      <div class="confirm-body">
+        <div class="correction-summary" id="correction-summary">
+          <div class="correction-summary-row">
+            <span class="correction-summary-label">SKU</span>
+            <span class="correction-summary-value" id="confirm-sku"></span>
+          </div>
+          <div class="correction-summary-row">
+            <span class="correction-summary-label">Box Number</span>
+            <span class="correction-summary-value" id="confirm-box"></span>
+          </div>
+          <div class="correction-summary-row">
+            <span class="correction-summary-label">Current Quantity</span>
+            <span class="correction-summary-value" id="confirm-current-qty"></span>
+          </div>
+          <div class="correction-summary-row">
+            <span class="correction-summary-label">Actual Quantity</span>
+            <span class="correction-summary-value" id="confirm-actual-qty"></span>
+          </div>
+          <div class="correction-summary-row">
+            <span class="correction-summary-label">Adjustment</span>
+            <span class="correction-summary-value" id="confirm-adjustment"></span>
+          </div>
+        </div>
+        <div class="confirm-message">This will create an IncomingLog entry with the adjustment value.</div>
+      </div>
+      <div class="confirm-footer">
+        <button class="btn btn-cancel" onclick="closeCorrectionConfirmModal()">Cancel</button>
+        <button class="btn btn-confirm" onclick="confirmSubmitCorrection()">Confirm Correction</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    // State
+    // Backend API URL (Google Apps Script deployed web app)
+    var GAS_URL = 'https://script.google.com/macros/s/AKfycbyRxkJYc8dQst57KJOuf7eiuHNSW27PFNwKeqf3AEOxBewpVXgxIlDUykeFoM7wWjVt/exec';
+
+    function callBackend(payload) {
+      return fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      }).then(function(resp) {
+        if (!resp.ok) throw new Error('Network error: ' + resp.status);
+        return resp.json();
+      });
+    }
+
+    // State
+    let incomingRecords = [];
+    let outgoingRecords = [];
+    let html5QrCode = null;
+    let currentScanTarget = null;
+    let isScanning = false;
+    let pendingOutgoingSubmit = false;
+
+    // v2.0: Bulk upload state
+    let incomingUploadData = [];
+    let outgoingUploadData = [];
+
+    // Box selection state for outgoing tab
+    let boxSelectionData = [];
+    let lastFetchedSku = '';
+
+    // Correction state
+    let correctionData = {
+      sku: '',
+      boxNumber: '',
+      currentQuantity: 0,
+      checked: false
+    };
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeTabs();
+      loadDropdowns();
+      document.getElementById('search-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); performSearch(); }
+      });
+
+      // Outgoing: fetch boxes when SKU field loses focus or Enter is pressed
+      var outgoingSku = document.getElementById('outgoing-sku');
+      outgoingSku.addEventListener('blur', function() {
+        var sku = this.value.trim();
+        if (sku && sku !== lastFetchedSku) { fetchBoxesForSku(sku); }
+      });
+      outgoingSku.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          var sku = this.value.trim();
+          if (sku && sku !== lastFetchedSku) { fetchBoxesForSku(sku); }
+        }
+      });
+
+      // Update allocation counter when total quantity changes
+      document.getElementById('outgoing-qty').addEventListener('input', function() {
+        updateAllocationCounter();
+      });
+    });
+
+    // Tab Navigation
+    function initializeTabs() {
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      tabBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+          const tabId = this.dataset.tab;
+          tabBtns.forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+          document.getElementById(tabId + '-tab').classList.add('active');
+        });
+      });
+    }
+
+    // Dropdowns
+    function loadDropdowns() {
+      showLoading();
+      callBackend({ action: 'getDropdowns' })
+        .then(function(result) {
+          hideLoading();
+          if (result && result.success) {
+            populateSelect('incoming-brand', result.brands);
+            populateSelect('outgoing-brand', result.brands);
+            populateSelect('outgoing-marketplace', result.marketplaces);
+          } else {
+            showToast('Failed to load dropdown data', 'error');
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          showToast('Error loading data: ' + (error.message || error), 'error');
+        });
+    }
+
+    function populateSelect(selectId, options) {
+      const select = document.getElementById(selectId);
+      const currentValue = select.value;
+      const placeholder = select.options[0];
+      select.innerHTML = '';
+      select.appendChild(placeholder);
+      options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt;
+        option.textContent = opt;
+        select.appendChild(option);
+      });
+      if (currentValue && options.includes(currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    // =============================================
+    // v2.0: BULK UPLOAD FUNCTIONS
+    // =============================================
+
+    // Download CSV template
+    function downloadIncomingTemplate() {
+      const template = 'BoxNumber,Brand,SKU,Quantity,ProductName\n';
+      downloadCSV(template, 'incoming_template.csv');
+      showToast('Template downloaded', 'success');
+    }
+
+    function downloadOutgoingTemplate() {
+      const template = 'Brand,Marketplace,SKU,Quantity,BoxNumber,OrderID,ProductName\n';
+      downloadCSV(template, 'outgoing_template.csv');
+      showToast('Template downloaded', 'success');
+    }
+
+    function downloadCSV(content, filename) {
+      const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Handle file upload - Incoming
+    function handleIncomingFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const extension = file.name.split('.').pop().toLowerCase();
+
+      if (extension === 'csv') {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            validateAndPreviewIncoming(results.data);
+          },
+          error: function(error) {
+            showToast('Error parsing CSV: ' + error.message, 'error');
+          }
+        });
+      } else if (extension === 'xlsx' || extension === 'xls') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const workbook = XLSX.read(e.target.result, { type: 'binary' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json(sheet);
+            validateAndPreviewIncoming(data);
+          } catch (error) {
+            showToast('Error parsing Excel file: ' + error.message, 'error');
+          }
+        };
+        reader.readAsBinaryString(file);
+      } else {
+        showToast('Please upload a CSV or XLSX file', 'error');
+      }
+
+      // Reset file input
+      event.target.value = '';
+    }
+
+    // Validate and preview incoming data
+    function validateAndPreviewIncoming(records) {
+      // Filter out empty rows
+      records = records.filter(r => r.SKU || r.BoxNumber || r.Quantity);
+
+      if (records.length === 0) {
+        showToast('No data found in file', 'error');
+        return;
+      }
+
+      let hasErrors = false;
+      const validated = records.map((record, index) => {
+        const errors = [];
+
+        // Required field validation
+        if (!record.BoxNumber || !record.BoxNumber.toString().trim()) {
+          errors.push('Missing BoxNumber');
+        }
+        if (!record.SKU || !record.SKU.toString().trim()) {
+          errors.push('Missing SKU');
+        }
+        const qty = parseInt(record.Quantity);
+        if (isNaN(qty) || qty < 1) {
+          errors.push('Invalid Quantity');
+        }
+
+        if (errors.length > 0) hasErrors = true;
+
+        return {
+          boxNumber: record.BoxNumber ? record.BoxNumber.toString().trim() : '',
+          brand: record.Brand ? record.Brand.toString().trim() : '',
+          sku: record.SKU ? record.SKU.toString().trim() : '',
+          quantity: qty || 0,
+          productName: record.ProductName ? record.ProductName.toString().trim() : '',
+          errors: errors,
+          isValid: errors.length === 0
+        };
+      });
+
+      // Store for later submission
+      incomingUploadData = validated;
+
+      // Render preview
+      renderIncomingUploadPreview(validated, hasErrors);
+    }
+
+    function renderIncomingUploadPreview(data, hasErrors) {
+      const section = document.getElementById('incoming-preview-section');
+      const countEl = document.getElementById('incoming-preview-count');
+      const messageEl = document.getElementById('incoming-preview-message');
+      const tbody = document.getElementById('incoming-preview-body');
+      const confirmBtn = document.getElementById('incoming-confirm-upload-btn');
+
+      countEl.textContent = data.length + ' rows';
+
+      if (hasErrors) {
+        messageEl.innerHTML = '<div class="preview-error-message">Errors found. Fix the issues in your file and re-upload.</div>';
+        confirmBtn.disabled = true;
+      } else {
+        messageEl.innerHTML = '<div class="preview-success-message">All rows valid. Ready to upload.</div>';
+        confirmBtn.disabled = false;
+      }
+
+      let html = '';
+      data.forEach((row, index) => {
+        const rowClass = row.isValid ? '' : 'error-row';
+        html += '<tr class="' + rowClass + '">' +
+          '<td>' + escapeHtml(row.boxNumber) + '</td>' +
+          '<td>' + escapeHtml(row.brand || '-') + '</td>' +
+          '<td>' + escapeHtml(row.sku) + '</td>' +
+          '<td>' + row.quantity + '</td>' +
+          '<td class="error-cell">' + (row.errors.length > 0 ? row.errors.join(', ') : '-') + '</td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
+
+      section.classList.add('active');
+    }
+
+    function cancelIncomingUpload() {
+      document.getElementById('incoming-preview-section').classList.remove('active');
+      incomingUploadData = [];
+    }
+
+    function confirmIncomingUpload() {
+      const validRecords = incomingUploadData.filter(r => r.isValid);
+      if (validRecords.length === 0) {
+        showToast('No valid records to upload', 'error');
+        return;
+      }
+
+      const confirmBtn = document.getElementById('incoming-confirm-upload-btn');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Uploading...';
+      showLoading();
+
+      callBackend({ action: 'submitBulkIncoming', records: validRecords })
+        .then(function(result) {
+          hideLoading();
+          confirmBtn.textContent = 'Confirm Upload';
+
+          if (result && result.success) {
+            showToast(result.message, 'success');
+            cancelIncomingUpload();
+          } else {
+            showToast('Error: ' + (result.error || 'Unknown error'), 'error');
+            confirmBtn.disabled = false;
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          confirmBtn.textContent = 'Confirm Upload';
+          confirmBtn.disabled = false;
+          showToast('Error: ' + (error.message || error), 'error');
+        });
+    }
+
+    // Handle file upload - Outgoing
+    function handleOutgoingFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const extension = file.name.split('.').pop().toLowerCase();
+
+      if (extension === 'csv') {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            validateAndPreviewOutgoing(results.data);
+          },
+          error: function(error) {
+            showToast('Error parsing CSV: ' + error.message, 'error');
+          }
+        });
+      } else if (extension === 'xlsx' || extension === 'xls') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const workbook = XLSX.read(e.target.result, { type: 'binary' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json(sheet);
+            validateAndPreviewOutgoing(data);
+          } catch (error) {
+            showToast('Error parsing Excel file: ' + error.message, 'error');
+          }
+        };
+        reader.readAsBinaryString(file);
+      } else {
+        showToast('Please upload a CSV or XLSX file', 'error');
+      }
+
+      // Reset file input
+      event.target.value = '';
+    }
+
+    // Validate and preview outgoing data
+    function validateAndPreviewOutgoing(records) {
+      // Filter out empty rows
+      records = records.filter(r => r.SKU || r.BoxNumber || r.Quantity);
+
+      if (records.length === 0) {
+        showToast('No data found in file', 'error');
+        return;
+      }
+
+      let hasErrors = false;
+      const validated = records.map((record, index) => {
+        const errors = [];
+
+        // Required field validation
+        if (!record.SKU || !record.SKU.toString().trim()) {
+          errors.push('Missing SKU');
+        }
+        const qty = parseInt(record.Quantity);
+        if (isNaN(qty) || qty < 1) {
+          errors.push('Invalid Quantity');
+        }
+        if (!record.BoxNumber || !record.BoxNumber.toString().trim()) {
+          errors.push('Missing BoxNumber');
+        }
+
+        if (errors.length > 0) hasErrors = true;
+
+        return {
+          brand: record.Brand ? record.Brand.toString().trim() : '',
+          marketplace: record.Marketplace ? record.Marketplace.toString().trim() : '',
+          sku: record.SKU ? record.SKU.toString().trim() : '',
+          quantity: qty || 0,
+          boxNumber: record.BoxNumber ? record.BoxNumber.toString().trim() : '',
+          orderId: record.OrderID ? record.OrderID.toString().trim() : '',
+          productName: record.ProductName ? record.ProductName.toString().trim() : '',
+          errors: errors,
+          isValid: errors.length === 0
+        };
+      });
+
+      // Store for later submission
+      outgoingUploadData = validated;
+
+      // Render preview
+      renderOutgoingUploadPreview(validated, hasErrors);
+    }
+
+    function renderOutgoingUploadPreview(data, hasErrors) {
+      const section = document.getElementById('outgoing-preview-section');
+      const countEl = document.getElementById('outgoing-preview-count');
+      const messageEl = document.getElementById('outgoing-preview-message');
+      const tbody = document.getElementById('outgoing-preview-body');
+      const confirmBtn = document.getElementById('outgoing-confirm-upload-btn');
+
+      countEl.textContent = data.length + ' rows';
+
+      if (hasErrors) {
+        messageEl.innerHTML = '<div class="preview-error-message">Errors found. Fix the issues in your file and re-upload.</div>';
+        confirmBtn.disabled = true;
+      } else {
+        messageEl.innerHTML = '<div class="preview-success-message">All rows valid. Ready to upload.</div>';
+        confirmBtn.disabled = false;
+      }
+
+      let html = '';
+      data.forEach((row, index) => {
+        const rowClass = row.isValid ? '' : 'error-row';
+        html += '<tr class="' + rowClass + '">' +
+          '<td>' + escapeHtml(row.sku) + '</td>' +
+          '<td>' + row.quantity + '</td>' +
+          '<td>' + escapeHtml(row.boxNumber) + '</td>' +
+          '<td>' + escapeHtml(row.marketplace || '-') + '</td>' +
+          '<td class="error-cell">' + (row.errors.length > 0 ? row.errors.join(', ') : '-') + '</td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
+
+      section.classList.add('active');
+    }
+
+    function cancelOutgoingUpload() {
+      document.getElementById('outgoing-preview-section').classList.remove('active');
+      outgoingUploadData = [];
+    }
+
+    function confirmOutgoingUpload() {
+      const validRecords = outgoingUploadData.filter(r => r.isValid);
+      if (validRecords.length === 0) {
+        showToast('No valid records to upload', 'error');
+        return;
+      }
+
+      const confirmBtn = document.getElementById('outgoing-confirm-upload-btn');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Uploading...';
+      showLoading();
+
+      callBackend({ action: 'submitBulkOutgoing', records: validRecords })
+        .then(function(result) {
+          hideLoading();
+          confirmBtn.textContent = 'Confirm Upload';
+
+          if (result && result.success) {
+            if (result.hasNegatives) {
+              showToast(result.message, 'warning');
+            } else {
+              showToast(result.message, 'success');
+            }
+            cancelOutgoingUpload();
+          } else {
+            showToast('Error: ' + (result.error || 'Unknown error'), 'error');
+            confirmBtn.disabled = false;
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          confirmBtn.textContent = 'Confirm Upload';
+          confirmBtn.disabled = false;
+          showToast('Error: ' + (error.message || error), 'error');
+        });
+    }
+
+    // =============================================
+    // INCOMING (Manual Entry)
+    // =============================================
+
+    function addIncomingRecord() {
+      const brand = document.getElementById('incoming-brand').value;
+      const boxNumber = document.getElementById('incoming-box').value.trim();
+      const sku = document.getElementById('incoming-sku').value.trim();
+      const quantity = parseInt(document.getElementById('incoming-qty').value) || 0;
+
+      if (!boxNumber) { showToast('Please enter box number', 'error'); document.getElementById('incoming-box').focus(); return; }
+      if (!sku) { showToast('Please enter SKU', 'error'); document.getElementById('incoming-sku').focus(); return; }
+      if (quantity < 1) { showToast('Please enter valid quantity', 'error'); document.getElementById('incoming-qty').focus(); return; }
+
+      incomingRecords.push({ brand: brand, boxNumber: boxNumber, sku: sku, quantity: quantity });
+      renderIncomingRecords();
+      document.getElementById('incoming-sku').value = '';
+      document.getElementById('incoming-qty').value = '1';
+      document.getElementById('incoming-sku').focus();
+      showToast('Record added', 'success');
+    }
+
+    function removeIncomingRecord(index) {
+      incomingRecords.splice(index, 1);
+      renderIncomingRecords();
+    }
+
+    function renderIncomingRecords() {
+      const tbody = document.getElementById('incoming-records');
+      const submitBtn = document.getElementById('incoming-submit-btn');
+      if (incomingRecords.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="no-records">No records added yet</td></tr>';
+        submitBtn.disabled = true;
+        return;
+      }
+      let html = '';
+      incomingRecords.forEach((record, index) => {
+        html += '<tr><td>' + escapeHtml(record.boxNumber) + '</td><td>' + escapeHtml(record.brand || '-') + '</td><td>' + escapeHtml(record.sku) + '</td><td>' + record.quantity + '</td><td><button class="btn-remove" onclick="removeIncomingRecord(' + index + ')">x</button></td></tr>';
+      });
+      tbody.innerHTML = html;
+      submitBtn.disabled = false;
+    }
+
+    function submitIncoming() {
+      if (incomingRecords.length === 0) { showToast('No records to submit', 'error'); return; }
+      const submitBtn = document.getElementById('incoming-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      showLoading();
+
+      callBackend({ action: 'submitIncoming', records: incomingRecords })
+        .then(function(result) {
+          hideLoading();
+          submitBtn.textContent = 'Submit';
+          if (result && result.success) {
+            showToast(result.message, 'success');
+            incomingRecords = [];
+            renderIncomingRecords();
+            document.getElementById('incoming-sku').value = '';
+            document.getElementById('incoming-qty').value = '1';
+          } else {
+            showToast('Error: ' + (result.error || 'Unknown error'), 'error');
+            submitBtn.disabled = false;
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          submitBtn.textContent = 'Submit';
+          submitBtn.disabled = false;
+          showToast('Error: ' + (error.message || error), 'error');
+        });
+    }
+
+    // =============================================
+    // OUTGOING (Box Selection)
+    // =============================================
+
+    function fetchBoxesForSku(sku) {
+      if (!sku) return;
+      lastFetchedSku = sku;
+      var container = document.getElementById('box-selection-container');
+      var tbody = document.getElementById('box-selection-body');
+      var messageEl = document.getElementById('box-selection-message');
+
+      container.style.display = 'block';
+      tbody.innerHTML = '<tr><td colspan="4" class="box-selection-loading">Loading boxes...</td></tr>';
+      messageEl.textContent = '';
+      messageEl.className = 'box-selection-message';
+
+      callBackend({ action: 'getBoxesForSku', sku: sku })
+        .then(function(result) {
+          if (result && result.success) {
+            boxSelectionData = (result.boxes || []).map(function(box) {
+              return {
+                boxNumber: box.boxNumber,
+                availableQuantity: box.availableQuantity,
+                brand: box.brand,
+                productName: box.productName,
+                selected: false,
+                takeQuantity: 0
+              };
+            });
+            if (boxSelectionData.length > 0) {
+              var firstBrand = boxSelectionData[0].brand;
+              var allSameBrand = boxSelectionData.every(function(b) { return b.brand === firstBrand; });
+              if (allSameBrand && firstBrand) {
+                var brandSelect = document.getElementById('outgoing-brand');
+                if (brandSelect) { brandSelect.value = firstBrand; }
+              }
+            }
+            renderBoxSelectionTable();
+          } else {
+            tbody.innerHTML = '';
+            messageEl.textContent = result.error || 'Failed to fetch boxes';
+            messageEl.className = 'box-selection-message no-boxes';
+            boxSelectionData = [];
+          }
+        })
+        .catch(function(error) {
+          tbody.innerHTML = '';
+          messageEl.textContent = 'Error: ' + (error.message || error);
+          messageEl.className = 'box-selection-message no-boxes';
+          boxSelectionData = [];
+        });
+    }
+
+    function renderBoxSelectionTable() {
+      var tbody = document.getElementById('box-selection-body');
+      var messageEl = document.getElementById('box-selection-message');
+
+      if (boxSelectionData.length === 0) {
+        tbody.innerHTML = '';
+        messageEl.textContent = 'No boxes found with available stock for this SKU.';
+        messageEl.className = 'box-selection-message no-boxes';
+        updateAllocationCounter();
+        return;
+      }
+
+      messageEl.textContent = '';
+      messageEl.className = 'box-selection-message';
+
+      var html = '';
+      boxSelectionData.forEach(function(box, index) {
+        var rowClass = box.selected ? 'selected' : '';
+        var checkedAttr = box.selected ? 'checked' : '';
+        var disabledAttr = box.selected ? '' : 'disabled';
+        var qtyValue = box.selected ? box.takeQuantity : '';
+        html += '<tr class="' + rowClass + '">' +
+          '<td><input type="checkbox" ' + checkedAttr + ' onchange="toggleBoxSelection(' + index + ')"></td>' +
+          '<td>' + escapeHtml(box.boxNumber) + '</td>' +
+          '<td>' + box.availableQuantity + '</td>' +
+          '<td><input type="number" id="box-qty-' + index + '" min="1" max="' + box.availableQuantity + '" value="' + qtyValue + '" ' + disabledAttr + ' onchange="updateBoxQuantity(' + index + ', this.value)" oninput="updateBoxQuantity(' + index + ', this.value)" placeholder="0"></td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
+      updateAllocationCounter();
+    }
+
+    function toggleBoxSelection(index) {
+      var box = boxSelectionData[index];
+      box.selected = !box.selected;
+      if (box.selected) {
+        var totalNeeded = parseInt(document.getElementById('outgoing-qty').value) || 0;
+        var currentAllocated = boxSelectionData.reduce(function(sum, b, i) {
+          return sum + (i !== index && b.selected ? (b.takeQuantity || 0) : 0);
+        }, 0);
+        var remaining = totalNeeded - currentAllocated;
+        box.takeQuantity = Math.min(Math.max(remaining, 1), box.availableQuantity);
+      } else {
+        box.takeQuantity = 0;
+      }
+      renderBoxSelectionTable();
+    }
+
+    function updateBoxQuantity(index, value) {
+      var box = boxSelectionData[index];
+      var qty = parseInt(value) || 0;
+      box.takeQuantity = Math.min(Math.max(qty, 0), box.availableQuantity);
+      updateAllocationCounter();
+    }
+
+    function updateAllocationCounter() {
+      var totalNeeded = parseInt(document.getElementById('outgoing-qty').value) || 0;
+      var allocated = boxSelectionData.reduce(function(sum, box) {
+        return sum + (box.selected ? (box.takeQuantity || 0) : 0);
+      }, 0);
+      var counterEl = document.getElementById('allocation-counter');
+      if (!counterEl) return;
+      counterEl.textContent = 'Allocated: ' + allocated + ' / ' + totalNeeded;
+      counterEl.classList.remove('complete', 'over');
+      if (allocated === totalNeeded && totalNeeded > 0) {
+        counterEl.classList.add('complete');
+      } else if (allocated > totalNeeded) {
+        counterEl.classList.add('over');
+      }
+    }
+
+    function toggleOtherDetails() {
+      var content = document.getElementById('other-details-content');
+      var toggle = document.getElementById('other-details-toggle');
+      var arrow = document.getElementById('toggle-arrow');
+      if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.classList.add('open');
+        arrow.classList.add('open');
+      } else {
+        content.style.display = 'none';
+        toggle.classList.remove('open');
+        arrow.classList.remove('open');
+      }
+    }
+
+    // =============================================
+    // OUTGOING (Manual Entry)
+    // =============================================
+
+    function addOutgoingRecord() {
+      var marketplace = document.getElementById('outgoing-marketplace').value;
+      var brand = document.getElementById('outgoing-brand').value;
+      var sku = document.getElementById('outgoing-sku').value.trim();
+      var orderId = document.getElementById('outgoing-order').value.trim();
+      var totalQuantity = parseInt(document.getElementById('outgoing-qty').value) || 0;
+
+      if (!sku) { showToast('Please enter SKU', 'error'); document.getElementById('outgoing-sku').focus(); return; }
+      if (totalQuantity < 1) { showToast('Please enter valid quantity', 'error'); document.getElementById('outgoing-qty').focus(); return; }
+
+      var selectedBoxes = boxSelectionData.filter(function(box) { return box.selected && box.takeQuantity > 0; });
+      if (selectedBoxes.length === 0) {
+        showToast('Please select at least one box and enter quantity to take', 'error');
+        return;
+      }
+
+      var totalAllocated = selectedBoxes.reduce(function(sum, box) { return sum + box.takeQuantity; }, 0);
+      if (totalAllocated > totalQuantity) {
+        showToast('Allocated quantity (' + totalAllocated + ') exceeds total needed (' + totalQuantity + ')', 'error');
+        return;
+      }
+
+      if (totalAllocated < totalQuantity) {
+        if (!confirm('You have allocated ' + totalAllocated + ' out of ' + totalQuantity + ' needed. Continue?')) {
+          return;
+        }
+      }
+
+      selectedBoxes.forEach(function(box) {
+        outgoingRecords.push({
+          marketplace: marketplace,
+          brand: brand || box.brand,
+          sku: sku,
+          orderId: orderId,
+          quantity: box.takeQuantity,
+          boxNumber: box.boxNumber
+        });
+      });
+
+      renderOutgoingRecords();
+      document.getElementById('outgoing-sku').value = '';
+      document.getElementById('outgoing-order').value = '';
+      document.getElementById('outgoing-qty').value = '1';
+      document.getElementById('box-selection-container').style.display = 'none';
+      boxSelectionData = [];
+      lastFetchedSku = '';
+      showToast(selectedBoxes.length + ' record(s) added from ' + selectedBoxes.length + ' box(es)', 'success');
+      document.getElementById('outgoing-sku').focus();
+    }
+
+    function removeOutgoingRecord(index) {
+      outgoingRecords.splice(index, 1);
+      renderOutgoingRecords();
+    }
+
+    function renderOutgoingRecords() {
+      const tbody = document.getElementById('outgoing-records');
+      const submitBtn = document.getElementById('outgoing-submit-btn');
+      if (outgoingRecords.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="no-records">No records added yet</td></tr>';
+        submitBtn.disabled = true;
+        return;
+      }
+      let html = '';
+      outgoingRecords.forEach((record, index) => {
+        html += '<tr><td>' + escapeHtml(record.sku) + '</td><td>' + escapeHtml(record.orderId || '-') + '</td><td>' + escapeHtml(record.boxNumber) + '</td><td>' + record.quantity + '</td><td><button class="btn-remove" onclick="removeOutgoingRecord(' + index + ')">x</button></td></tr>';
+      });
+      tbody.innerHTML = html;
+      submitBtn.disabled = false;
+    }
+
+    function validateAndSubmitOutgoing() {
+      if (outgoingRecords.length === 0) { showToast('No records to submit', 'error'); return; }
+
+      const submitBtn = document.getElementById('outgoing-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Validating...';
+      showLoading();
+
+      callBackend({ action: 'validateOutgoing', records: outgoingRecords })
+        .then(function(result) {
+          hideLoading();
+          submitBtn.textContent = 'Submit';
+
+          if (result && result.success) {
+            if (result.hasWarnings && result.warnings.length > 0) {
+              showConfirmModal(result.warnings);
+            } else {
+              doSubmitOutgoing();
+            }
+          } else {
+            showToast('Validation error: ' + (result.error || 'Unknown'), 'error');
+            submitBtn.disabled = false;
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          submitBtn.textContent = 'Submit';
+          submitBtn.disabled = false;
+          showToast('Error: ' + (error.message || error), 'error');
+        });
+    }
+
+    function showConfirmModal(warnings) {
+      const warningList = document.getElementById('warning-list');
+      warningList.innerHTML = warnings.map(w => '<li class="warning-item">' + escapeHtml(w.message) + '</li>').join('');
+      document.getElementById('confirm-overlay').classList.add('active');
+      pendingOutgoingSubmit = true;
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirm-overlay').classList.remove('active');
+      pendingOutgoingSubmit = false;
+      document.getElementById('outgoing-submit-btn').disabled = false;
+    }
+
+    function confirmSubmitOutgoing() {
+      closeConfirmModal();
+      doSubmitOutgoing();
+    }
+
+    function doSubmitOutgoing() {
+      const submitBtn = document.getElementById('outgoing-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      showLoading();
+
+      callBackend({ action: 'submitOutgoing', records: outgoingRecords })
+        .then(function(result) {
+          hideLoading();
+          submitBtn.textContent = 'Submit';
+          if (result && result.success) {
+            if (result.hasNegatives) {
+              showToast(result.message, 'warning');
+            } else {
+              showToast(result.message, 'success');
+            }
+            outgoingRecords = [];
+            renderOutgoingRecords();
+            document.getElementById('outgoing-sku').value = '';
+            document.getElementById('outgoing-order').value = '';
+            document.getElementById('outgoing-qty').value = '1';
+            document.getElementById('box-selection-container').style.display = 'none';
+            boxSelectionData = [];
+            lastFetchedSku = '';
+          } else {
+            showToast('Error: ' + (result.error || 'Unknown error'), 'error');
+            submitBtn.disabled = false;
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          submitBtn.textContent = 'Submit';
+          submitBtn.disabled = false;
+          showToast('Error: ' + (error.message || error), 'error');
+        });
+    }
+
+    // =============================================
+    // SEARCH
+    // =============================================
+
+    function performSearch() {
+      const query = document.getElementById('search-input').value.trim();
+      if (!query) { showToast('Please enter a search query', 'error'); document.getElementById('search-input').focus(); return; }
+      showLoading();
+
+      callBackend({ action: 'search', query: query })
+        .then(function(result) {
+          hideLoading();
+          if (result && result.success) {
+            renderSearchResults(result.results);
+          } else {
+            showToast('Search failed: ' + (result.error || 'Unknown error'), 'error');
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          showToast('Search error: ' + (error.message || error), 'error');
+        });
+    }
+
+    function renderSearchResults(results) {
+      const boxResults = document.getElementById('box-results');
+      document.getElementById('box-count').textContent = results.byBoxNumber.length;
+      boxResults.innerHTML = results.byBoxNumber.length === 0 ? '<div class="no-results">No results</div>' : results.byBoxNumber.map(renderResultItem).join('');
+
+      const skuResults = document.getElementById('sku-results');
+      document.getElementById('sku-count').textContent = results.bySKU.length;
+      skuResults.innerHTML = results.bySKU.length === 0 ? '<div class="no-results">No results</div>' : results.bySKU.map(renderResultItem).join('');
+
+      const brandResults = document.getElementById('brand-results');
+      document.getElementById('brand-count').textContent = results.byBrand.length;
+      brandResults.innerHTML = results.byBrand.length === 0 ? '<div class="no-results">No results</div>' : results.byBrand.map(renderResultItem).join('');
+    }
+
+    function renderResultItem(item) {
+      const isNegative = item.isNegative || item.quantity < 0;
+      const itemClass = isNegative ? 'result-item negative' : 'result-item';
+      const qtyClass = isNegative ? 'result-value negative' : 'result-value';
+
+      let html = '<div class="' + itemClass + '">' +
+        '<div class="result-row"><span class="result-label">SKU</span><span class="result-value">' + escapeHtml(item.sku) + '</span></div>' +
+        '<div class="result-row"><span class="result-label">Box Number</span><span class="result-value">' + escapeHtml(item.boxNumber) + '</span></div>' +
+        '<div class="result-row"><span class="result-label">Brand</span><span class="result-value">' + escapeHtml(item.brand || '-') + '</span></div>' +
+        '<div class="result-row"><span class="result-label">Quantity</span><span class="' + qtyClass + '">' + item.quantity + (isNegative ? ' (NEGATIVE)' : '') + '</span></div>';
+
+      if (item.productName) {
+        html += '<div class="result-row"><span class="result-label">Product Name</span><span class="result-value">' + escapeHtml(item.productName) + '</span></div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // =============================================
+    // CORRECTION
+    // =============================================
+
+    function checkCurrentQuantity() {
+      const sku = document.getElementById('correction-sku').value.trim();
+      const boxNumber = document.getElementById('correction-box').value.trim();
+
+      if (!sku) { showToast('Please enter SKU', 'error'); document.getElementById('correction-sku').focus(); return; }
+      if (!boxNumber) { showToast('Please enter Box Number', 'error'); document.getElementById('correction-box').focus(); return; }
+
+      const checkBtn = document.getElementById('check-qty-btn');
+      checkBtn.disabled = true;
+      checkBtn.textContent = 'Checking...';
+      showLoading();
+
+      callBackend({ action: 'checkQuantity', sku: sku, boxNumber: boxNumber })
+        .then(function(result) {
+          hideLoading();
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'Check Current Quantity';
+
+          if (result && result.success) {
+            correctionData.sku = result.sku;
+            correctionData.boxNumber = result.boxNumber;
+            correctionData.currentQuantity = result.currentQuantity;
+            correctionData.checked = true;
+
+            document.getElementById('current-qty-value').textContent = result.currentQuantity;
+            document.getElementById('current-qty-info').textContent = result.sku + ' in ' + result.boxNumber + (result.productName ? ' - ' + result.productName : '');
+            document.getElementById('current-qty-display').classList.remove('hidden');
+
+            document.getElementById('correction-form-section').classList.add('visible');
+            document.getElementById('correction-actual-qty').value = '';
+            document.getElementById('correction-actual-qty').focus();
+
+          } else {
+            correctionData.checked = false;
+            document.getElementById('current-qty-display').classList.add('hidden');
+            document.getElementById('correction-form-section').classList.remove('visible');
+            showToast(result.error || 'SKU+Box not found', 'error');
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'Check Current Quantity';
+          correctionData.checked = false;
+          showToast('Error: ' + (error.message || error), 'error');
+        });
+    }
+
+    function validateAndSubmitCorrection() {
+      if (!correctionData.checked) {
+        showToast('Please check current quantity first', 'error');
+        return;
+      }
+
+      const actualQtyInput = document.getElementById('correction-actual-qty').value;
+      if (actualQtyInput === '' || actualQtyInput === null) {
+        showToast('Please enter actual quantity', 'error');
+        document.getElementById('correction-actual-qty').focus();
+        return;
+      }
+
+      const actualQty = parseInt(actualQtyInput);
+      if (isNaN(actualQty) || actualQty < 0) {
+        showToast('Please enter a valid non-negative quantity', 'error');
+        document.getElementById('correction-actual-qty').focus();
+        return;
+      }
+
+      const difference = actualQty - correctionData.currentQuantity;
+
+      if (difference === 0) {
+        showToast('No correction needed. Quantity is already ' + actualQty, 'info');
+        return;
+      }
+
+      document.getElementById('confirm-sku').textContent = correctionData.sku;
+      document.getElementById('confirm-box').textContent = correctionData.boxNumber;
+      document.getElementById('confirm-current-qty').textContent = correctionData.currentQuantity;
+      document.getElementById('confirm-actual-qty').textContent = actualQty;
+
+      const adjustmentEl = document.getElementById('confirm-adjustment');
+      if (difference > 0) {
+        adjustmentEl.textContent = '+' + difference;
+        adjustmentEl.className = 'correction-summary-value increase';
+      } else {
+        adjustmentEl.textContent = difference;
+        adjustmentEl.className = 'correction-summary-value decrease';
+      }
+
+      document.getElementById('correction-confirm-overlay').classList.add('active');
+    }
+
+    function closeCorrectionConfirmModal() {
+      document.getElementById('correction-confirm-overlay').classList.remove('active');
+    }
+
+    function confirmSubmitCorrection() {
+      closeCorrectionConfirmModal();
+
+      const actualQty = parseInt(document.getElementById('correction-actual-qty').value);
+      const submitBtn = document.getElementById('correction-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      showLoading();
+
+      callBackend({
+          action: 'submitCorrection',
+          sku: correctionData.sku,
+          boxNumber: correctionData.boxNumber,
+          actualQuantity: actualQty
+        })
+        .then(function(result) {
+          hideLoading();
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Correction';
+
+          if (result && result.success) {
+            if (result.noChange) {
+              showToast(result.message, 'info');
+            } else {
+              showToast(result.message, 'success');
+              resetCorrectionForm();
+            }
+          } else {
+            showToast('Error: ' + (result.error || 'Unknown error'), 'error');
+          }
+        })
+        .catch(function(error) {
+          hideLoading();
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Correction';
+          showToast('Error: ' + (error.message || error), 'error');
+        });
+    }
+
+    function resetCorrectionForm() {
+      document.getElementById('correction-sku').value = '';
+      document.getElementById('correction-box').value = '';
+      document.getElementById('correction-actual-qty').value = '';
+      document.getElementById('current-qty-display').classList.add('hidden');
+      document.getElementById('correction-form-section').classList.remove('visible');
+      correctionData = { sku: '', boxNumber: '', currentQuantity: 0, checked: false };
+    }
+
+    // =============================================
+    // SCANNER
+    // =============================================
+
+    function startScanner(targetInputId) {
+      currentScanTarget = targetInputId;
+      document.getElementById('scanner-reader').style.display = 'block';
+      document.getElementById('scanner-hint').textContent = 'Scanning... Point camera at barcode';
+      document.getElementById('scanner-title').textContent = 'Live Scanner';
+      document.getElementById('scanner-overlay').classList.add('active');
+
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("scanner-reader");
+      }
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        function(decodedText) {
+          onScanSuccess(decodedText);
+        },
+        function(errorMessage) {
+        }
+      ).then(function() {
+        isScanning = true;
+      }).catch(function(err) {
+        showToast('Error accessing camera: ' + err, 'error');
+        document.getElementById('scanner-hint').textContent = 'Camera access denied or unavailable.';
+      });
+    }
+
+    function onScanSuccess(decodedText) {
+      playBeep();
+      var target = currentScanTarget;
+      if (target) document.getElementById(target).value = decodedText;
+      closeScanner();
+      showToast('Scanned: ' + decodedText, 'success');
+      if (target === 'outgoing-sku') {
+        setTimeout(function() { fetchBoxesForSku(decodedText.trim()); }, 300);
+      }
+    }
+
+    function onScanFailure(error) {}
+
+    function closeScanner() {
+      var overlay = document.getElementById('scanner-overlay');
+      if (isScanning && html5QrCode) {
+        html5QrCode.stop().then(function() {
+          isScanning = false;
+          resetScannerUI(overlay);
+        }).catch(function() {
+          isScanning = false;
+          resetScannerUI(overlay);
+        });
+      } else {
+        resetScannerUI(overlay);
+      }
+    }
+
+    function resetScannerUI(overlay) {
+      document.getElementById('scanner-reader').style.display = 'none';
+      overlay.classList.remove('active');
+      html5QrCode = null;
+      currentScanTarget = null;
+    }
+
+    function playBeep() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 1200;
+        osc.type = 'sine';
+        gain.gain.value = 0.3;
+        osc.start();
+        setTimeout(function() { osc.stop(); }, 100);
+      } catch (e) {}
+    }
+
+    // =============================================
+    // UI UTILITIES
+    // =============================================
+
+    function showLoading() { document.getElementById('loading-overlay').classList.add('active'); }
+    function hideLoading() { document.getElementById('loading-overlay').classList.remove('active'); }
+
+    function showToast(message, type) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-' + type;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function() { toast.remove(); }, 4000);
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text.toString();
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
