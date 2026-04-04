@@ -354,6 +354,17 @@
     .btn-close-scanner { width: 100%; margin-top: 16px; padding: 16px 40px; background: transparent; border: 2px solid rgba(255,255,255,0.3); border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; color: rgba(255,255,255,0.7); text-transform: uppercase; }
     .btn-close-scanner:active { background: rgba(255,255,255,0.1); }
 
+    /* Sub-tabs for Normal / Quick Add */
+    .sub-tab-nav { display: flex; gap: 0; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 2px solid var(--border-gray); }
+    .sub-tab-btn { flex: 1; padding: 10px 8px; font-size: 14px; font-weight: 700; text-align: center; border: none; cursor: pointer; background: var(--white); color: #666; transition: all 0.2s ease; }
+    .sub-tab-btn.active { color: var(--white); }
+    #incoming-tab .sub-tab-btn.active { background: var(--navy-blue); }
+    #incoming-tab .sub-tab-nav { border-color: var(--navy-blue); }
+    #outgoing-tab .sub-tab-btn.active { background: var(--dark-orange); }
+    #outgoing-tab .sub-tab-nav { border-color: var(--dark-orange); }
+    .sub-tab-content { display: none; }
+    .sub-tab-content.active { display: block; }
+
     .toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 2000; width: calc(100% - 32px); max-width: 400px; }
     .toast { padding: 16px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; animation: toastSlideUp 0.3s ease; text-align: center; margin-bottom: 8px; }
     .toast-success { background: #1b5e20; color: var(--white); }
@@ -501,6 +512,14 @@
 
       <div class="or-divider"><span>Or Add Manually</span></div>
 
+      <!-- Sub-tabs: Normal / Quick Add -->
+      <div class="sub-tab-nav" id="incoming-sub-tabs">
+        <button class="sub-tab-btn active" onclick="switchIncomingSubTab('normal')">Normal</button>
+        <button class="sub-tab-btn" onclick="switchIncomingSubTab('quick')">Quick Add</button>
+      </div>
+
+      <!-- Normal sub-tab -->
+      <div class="sub-tab-content active" id="incoming-normal-subtab">
       <form id="incoming-form" onsubmit="return false;">
         <div class="form-group">
           <label class="form-label">Brand <span class="optional">(Optional)</span></label>
@@ -529,6 +548,22 @@
 
         <button type="button" class="btn btn-action" onclick="addIncomingRecord()">Add SKU</button>
       </form>
+      </div>
+
+      <!-- Quick Add sub-tab -->
+      <div class="sub-tab-content" id="incoming-quick-subtab">
+        <div class="form-group">
+          <label class="form-label">Box Number</label>
+          <input type="text" id="incoming-quick-box" class="form-input" placeholder="Enter box number" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scan SKU</label>
+          <div class="input-row">
+            <input type="text" id="incoming-quick-sku" class="form-input" placeholder="Scan or type SKU" autocomplete="off">
+            <button type="button" class="btn btn-scan" onclick="startQuickScanner('incoming')">Scan</button>
+          </div>
+        </div>
+      </div>
 
       <div class="records-section">
         <div class="records-title">Records to Submit</div>
@@ -593,6 +628,14 @@
 
       <div class="or-divider"><span>Or Add Manually</span></div>
 
+      <!-- Sub-tabs: Normal / Quick Add -->
+      <div class="sub-tab-nav" id="outgoing-sub-tabs">
+        <button class="sub-tab-btn active" onclick="switchOutgoingSubTab('normal')">Normal</button>
+        <button class="sub-tab-btn" onclick="switchOutgoingSubTab('quick')">Quick Add</button>
+      </div>
+
+      <!-- Normal sub-tab -->
+      <div class="sub-tab-content active" id="outgoing-normal-subtab">
       <form id="outgoing-form" onsubmit="return false;">
         <div class="form-group">
           <label class="form-label">SKU ID</label>
@@ -658,6 +701,22 @@
 
         <button type="button" class="btn btn-action" onclick="addOutgoingRecord()">Add Record</button>
       </form>
+      </div>
+
+      <!-- Quick Add sub-tab -->
+      <div class="sub-tab-content" id="outgoing-quick-subtab">
+        <div class="form-group">
+          <label class="form-label">Box Number</label>
+          <input type="text" id="outgoing-quick-box" class="form-input" placeholder="Enter box number" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scan SKU</label>
+          <div class="input-row">
+            <input type="text" id="outgoing-quick-sku" class="form-input" placeholder="Scan or type SKU" autocomplete="off">
+            <button type="button" class="btn btn-scan" onclick="startQuickScanner('outgoing')">Scan</button>
+          </div>
+        </div>
+      </div>
 
       <div class="records-section">
         <div class="records-title">Records to Submit</div>
@@ -843,15 +902,12 @@
   <script>
     // State
     // Backend API URL (Google Apps Script deployed web app)
-    var GAS_URL = 'https://script.google.com/macros/s/AKfycbxAMwZ3T2l_6DNkw7F4SF4DIWU9tY4r0zItDVcvTqThh_EdZzrADSpeJgNErxGE90aH/exec';
+    // IMPORTANT: After each new GAS deployment, update this URL
+    var GAS_URL = 'https://script.google.com/macros/s/AKfycbzedcISpBh2GP5FzRK0rtuXzx8VVu0ulOmqJH9kVSPc8NDxNBoRHXYlPCkXoL0cju0Z/exec';
 
     function callBackend(payload) {
-      return fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      }).then(function(resp) {
-        if (!resp.ok) throw new Error('Network error: ' + resp.status);
+      var url = GAS_URL + '?payload=' + encodeURIComponent(JSON.stringify(payload));
+      return fetch(url).then(function(resp) {
         return resp.json();
       });
     }
@@ -863,6 +919,9 @@
     let currentScanTarget = null;
     let isScanning = false;
     let pendingOutgoingSubmit = false;
+    let quickScanMode = null; // null = normal scan, 'incoming' or 'outgoing' = quick add mode
+    let lastQuickScanText = '';
+    let lastQuickScanTime = 0;
 
     // v2.0: Bulk upload state
     let incomingUploadData = [];
@@ -1885,6 +1944,74 @@
     }
 
     // =============================================
+    // SUB-TAB SWITCHING (Normal / Quick Add)
+    // =============================================
+
+    function switchIncomingSubTab(mode) {
+      var tabs = document.getElementById('incoming-sub-tabs').children;
+      var normalTab = document.getElementById('incoming-normal-subtab');
+      var quickTab = document.getElementById('incoming-quick-subtab');
+      if (mode === 'quick') {
+        tabs[0].classList.remove('active');
+        tabs[1].classList.add('active');
+        normalTab.classList.remove('active');
+        quickTab.classList.add('active');
+        document.getElementById('incoming-quick-sku').focus();
+      } else {
+        tabs[1].classList.remove('active');
+        tabs[0].classList.add('active');
+        quickTab.classList.remove('active');
+        normalTab.classList.add('active');
+      }
+    }
+
+    function switchOutgoingSubTab(mode) {
+      var tabs = document.getElementById('outgoing-sub-tabs').children;
+      var normalTab = document.getElementById('outgoing-normal-subtab');
+      var quickTab = document.getElementById('outgoing-quick-subtab');
+      if (mode === 'quick') {
+        tabs[0].classList.remove('active');
+        tabs[1].classList.add('active');
+        normalTab.classList.remove('active');
+        quickTab.classList.add('active');
+        document.getElementById('outgoing-quick-sku').focus();
+      } else {
+        tabs[1].classList.remove('active');
+        tabs[0].classList.add('active');
+        quickTab.classList.remove('active');
+        normalTab.classList.add('active');
+      }
+    }
+
+    // =============================================
+    // QUICK ADD LOGIC
+    // =============================================
+
+    function startQuickScanner(tab) {
+      quickScanMode = tab;
+      var boxEl = document.getElementById(tab + '-quick-box');
+      if (!boxEl.value.trim()) {
+        showToast('Please enter Box Number first', 'error');
+        boxEl.focus();
+        return;
+      }
+      startScanner(tab + '-quick-sku');
+    }
+
+    function quickAddRecord(tab, sku) {
+      var boxNumber = document.getElementById(tab + '-quick-box').value.trim();
+      if (!boxNumber || !sku) return;
+
+      if (tab === 'incoming') {
+        incomingRecords.push({ brand: '', boxNumber: boxNumber, sku: sku, quantity: 1 });
+        renderIncomingRecords();
+      } else {
+        outgoingRecords.push({ marketplace: '', brand: '', sku: sku, orderId: '', quantity: 1, boxNumber: boxNumber });
+        renderOutgoingRecords();
+      }
+    }
+
+    // =============================================
     // SCANNER
     // =============================================
 
@@ -1918,6 +2045,22 @@
     function onScanSuccess(decodedText) {
       playBeep();
       var target = currentScanTarget;
+
+      if (quickScanMode) {
+        // Debounce: ignore same barcode within 2 seconds
+        var now = Date.now();
+        if (decodedText === lastQuickScanText && (now - lastQuickScanTime) < 2000) return;
+        lastQuickScanText = decodedText;
+        lastQuickScanTime = now;
+
+        // Quick Add mode: add record immediately, scanner stays open
+        var tab = quickScanMode;
+        document.getElementById(tab + '-quick-sku').value = decodedText;
+        quickAddRecord(tab, decodedText.trim());
+        return;
+      }
+
+      // Normal mode
       if (target) document.getElementById(target).value = decodedText;
       closeScanner();
       showToast('Scanned: ' + decodedText, 'success');
@@ -1948,6 +2091,9 @@
       overlay.classList.remove('active');
       html5QrCode = null;
       currentScanTarget = null;
+      quickScanMode = null;
+      lastQuickScanText = '';
+      lastQuickScanTime = 0;
     }
 
     function playBeep() {
