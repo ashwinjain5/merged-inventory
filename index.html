@@ -920,8 +920,6 @@
     let isScanning = false;
     let pendingOutgoingSubmit = false;
     let quickScanMode = null; // null = normal scan, 'incoming' or 'outgoing' = quick add mode
-    let lastQuickScanText = '';
-    let lastQuickScanTime = 0;
 
     // v2.0: Bulk upload state
     let incomingUploadData = [];
@@ -2047,16 +2045,11 @@
       var target = currentScanTarget;
 
       if (quickScanMode) {
-        // Debounce: ignore same barcode within 2 seconds
-        var now = Date.now();
-        if (decodedText === lastQuickScanText && (now - lastQuickScanTime) < 2000) return;
-        lastQuickScanText = decodedText;
-        lastQuickScanTime = now;
-
-        // Quick Add mode: add record immediately, scanner stays open
+        // Quick Add mode: add one record with qty 1, then close scanner
         var tab = quickScanMode;
         document.getElementById(tab + '-quick-sku').value = decodedText;
         quickAddRecord(tab, decodedText.trim());
+        closeScanner();
         return;
       }
 
@@ -2092,8 +2085,6 @@
       html5QrCode = null;
       currentScanTarget = null;
       quickScanMode = null;
-      lastQuickScanText = '';
-      lastQuickScanTime = 0;
     }
 
     function playBeep() {
