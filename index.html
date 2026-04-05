@@ -943,8 +943,35 @@
     // IMPORTANT: After each new GAS deployment, update this URL
     var GAS_URL = 'https://script.google.com/macros/s/AKfycbyqBBa8VEB9K-z8uV3EySzuTkg9bRTXU751OcBGPYT2e6rlBNcXN_532lmbidq1MswG/exec';
 
+    /**
+     * Call backend API
+     * Uses POST for bulk operations (any size) to avoid URL length limits
+     * Uses GET for small non-bulk requests (faster)
+     */
     function callBackend(payload) {
-      var url = GAS_URL + '?payload=' + encodeURIComponent(JSON.stringify(payload));
+      var payloadStr = JSON.stringify(payload);
+      var isBulk = payload.action && payload.action.toLowerCase().indexOf('bulk') !== -1;
+
+      // Use POST for ALL bulk uploads to avoid URL length limits (413 errors)
+      if (isBulk || payloadStr.length > 1500) {
+        return fetch(GAS_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain'  // text/plain avoids CORS preflight
+          },
+          body: payloadStr,
+          redirect: 'follow'
+        })
+        .then(function(resp) {
+          if (!resp.ok) {
+            throw new Error('Server error: ' + resp.status);
+          }
+          return resp.json();
+        });
+      }
+
+      // Use GET for small non-bulk payloads
+      var url = GAS_URL + '?payload=' + encodeURIComponent(payloadStr);
       return fetch(url).then(function(resp) {
         return resp.json();
       });
